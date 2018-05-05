@@ -144,12 +144,13 @@ public class ChannelManager {
   }
 
   public void notifyDisconnect(Channel channel) {
-    if (channel == null) {
-      return;
-    }
     syncPool.onDisconnect(channel);
     activePeers.values().remove(channel);
     newPeers.remove(channel);
+    if (channel == null || channel.getChannelHandlerContext() == null
+        || channel.getChannelHandlerContext().channel() == null) {
+      return;
+    }
     InetSocketAddress socketAddress = (InetSocketAddress) channel.getChannelHandlerContext()
         .channel().remoteAddress();
     recentlyDisconnected.put(socketAddress.getAddress(), new Date());
