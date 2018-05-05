@@ -5,7 +5,6 @@ import static org.tron.core.config.Parameter.ChainConstant.WITNESS_PAY_PER_BLOCK
 import static org.tron.protos.Protocol.Transaction.Contract.ContractType.TransferAssetContract;
 import static org.tron.protos.Protocol.Transaction.Contract.ContractType.TransferContract;
 
-import com.carrotsearch.sizeof.RamUsageEstimator;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
 import java.util.Arrays;
@@ -410,10 +409,12 @@ public class Manager {
   /**
    * push transaction into db.
    */
-  public synchronized boolean pushTransactions(final TransactionCapsule trx)
+  public boolean pushTransactions(final TransactionCapsule trx)
       throws ValidateSignatureException, ContractValidateException, ContractExeException,
       ValidateBandwidthException, DupTransactionException, TaposException {
-    logger.info("push transaction");
+    logger.info("push transaction " + Thread.currentThread().getId());
+
+    long startTime = System.currentTimeMillis();
 
     if (getTransactionStore().get(trx.getTransactionId().getBytes()) != null) {
       logger.debug(getTransactionStore().get(trx.getTransactionId().getBytes()).toString());
@@ -423,23 +424,29 @@ public class Manager {
     if (!trx.validateSignature()) {
       throw new ValidateSignatureException("trans sig validate failed");
     }
+    long step1 = System.currentTimeMillis() - startTime;
 
-    validateTapos(trx);
+    //validateTapos(trx);
 
     //validateFreq(trx);
+    logger.info("");
+    synchronized (this) {
+      if (!dialog.valid()) {
+        dialog.setValue(revokingStore.buildDialog());
+      }
 
-    if (!dialog.valid()) {
-      dialog.setValue(revokingStore.buildDialog());
+      try (RevokingStore.Dialog tmpDialog = revokingStore.buildDialog()) {
+        //consumeBandwidth(trx);
+        processTransaction(trx);
+        pendingTransactions.add(trx);
+        tmpDialog.merge();
+      } catch (RevokingStoreIllegalStateException e) {
+        logger.debug(e.getMessage(), e);
+      }
     }
+    long step2 = System.currentTimeMillis() - startTime - step1;
 
-    try (RevokingStore.Dialog tmpDialog = revokingStore.buildDialog()) {
-      consumeBandwidth(trx);
-      processTransaction(trx);
-      pendingTransactions.add(trx);
-      tmpDialog.merge();
-    } catch (RevokingStoreIllegalStateException e) {
-      logger.debug(e.getMessage(), e);
-    }
+    logger.info("thread:" + Thread.currentThread().getId() + " step1:" + step1 + " step2:" + step2);
     return true;
   }
 
@@ -810,7 +817,7 @@ public class Manager {
     final List<Actuator> actuatorList = ActuatorFactory.createActuator(trxCap, this);
     TransactionResultCapsule ret = new TransactionResultCapsule();
 
-    consumeBandwidth(trxCap);
+    //consumeBandwidth(trxCap);
 
     for (Actuator act : actuatorList) {
       act.validate();
