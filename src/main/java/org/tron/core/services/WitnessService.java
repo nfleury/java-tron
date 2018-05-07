@@ -76,6 +76,7 @@ public class WitnessService implements Service {
               DateTime nextTime = time.plus(timeToNextSecond);
               logger.debug(
                   "ProductionLoop sleep : " + timeToNextSecond + " ms,next time:" + nextTime);
+              logger.info("produce loop " + timeToNextSecond);
               Thread.sleep(timeToNextSecond);
             }
             this.blockProductionLoop();
